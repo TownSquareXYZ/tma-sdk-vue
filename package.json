@@ -1,0 +1,42 @@
+{
+  "name": "@tma.js/sdk-vue",
+  "private": false,
+  "version": "1.0.2",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "files": [
+    "lib",
+    "scripts"
+  ],
+  "main": "./lib/index.cjs",
+  "module": "./lib/index.mjs",
+  "types": "./lib/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "require": "./lib/index.cjs",
+      "import": "./lib/index.mjs",
+      "default": "./lib/index.cjs"
+    }
+  },
+  "dependencies": {
+    "@telegram-apps/sdk": "^1.1.0",
+    "@tonconnect/ui": "^2.0.5",
+    "eruda": "^3.0.1",
+    "scss": "^0.2.4",
+    "vite-plugin-dts": "^3.9.1",
+    "vue": "^3.3.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22.3.0",
+    "@vitejs/plugin-vue": "^4.2.3",
+    "sass": "^1.69.5",
+    "typescript": "^5.0.2",
+    "vite": "^4.4.5",
+    "vue-tsc": "^1.8.5"
+  }
+}
