@@ -25,7 +25,6 @@
   },
   "dependencies": {
     "@telegram-apps/sdk": "^1.1.0",
-    "@tonconnect/ui": "^2.0.5",
     "eruda": "^3.0.1",
     "scss": "^0.2.4",
     "vite-plugin-dts": "^3.9.1",
