@@ -28,7 +28,8 @@
     "eruda": "^3.0.1",
     "scss": "^0.2.4",
     "vite-plugin-dts": "^3.9.1",
-    "vue": "^3.3.4"
+    "vue": "^3.3.4",
+    "vue-router": "4"
   },
   "devDependencies": {
     "@types/node": "^22.3.0",
