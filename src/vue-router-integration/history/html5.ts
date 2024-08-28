@@ -59,6 +59,9 @@ function createCurrentLocation<State>(
     return stripBase(pathFromHash, "");
   }
   const path = stripBase(pathname, base);
+
+  // console.log("path", path, location, hashPos);
+
   return path + search + hash;
 }
 
@@ -88,7 +91,17 @@ function useHistoryListeners<State>(
     const fromState: StateEntry = historyState?.value;
     let delta = 0;
 
+    // console.log(
+    //   "fromState?.back || fromState?.forward",
+    //   fromState?.back,
+    //   fromState?.forward,
+    //   !!(fromState?.back || fromState?.forward),
+    //   to
+    // );
+
     if (state && (fromState?.back || fromState?.forward)) {
+      // console.log("fromState?.back || fromState?.forward");
+
       currentLocation.value = to;
       // historyState.value = fromState;
 
@@ -99,7 +112,7 @@ function useHistoryListeners<State>(
       }
       delta = fromState ? state.delta - fromState.position : 0;
     } else {
-      replace(to);
+      if (to !== from) replace(to);
     }
 
     // Here we could also revert the navigation by calling history.go(-delta)
@@ -140,9 +153,9 @@ function useHistoryListeners<State>(
   function beforeUnloadListener() {
     const { history } = window;
     navigator.detach();
-    // if (!navigator.state) return;
     listeners = [];
-    history.replaceState(
+    // if (!navigator.state) return;
+    history?.replaceState(
       assign({}, navigator.state, { scroll: computeScrollPosition() }),
       ""
     );
@@ -245,12 +258,16 @@ function useHistoryStateNavigation<State>(
      */
 
     const hashIndex = base.indexOf("#");
+    // console.log("hashIndex11", hashIndex, createBaseLocation(), base, to);
+
     const url =
       hashIndex > -1
         ? (location.host && document.querySelector("base")
             ? base
             : base.slice(hashIndex)) + to
         : createBaseLocation() + base + to;
+
+    // console.log("hashIndex11", url, createBaseLocation(), base, to);
 
     navigator[replace ? "replace" : "push"](url, state as State);
     historyState.value = state;
