@@ -6,7 +6,6 @@ import {
   HistoryState,
   ValueContainer,
   normalizeBase,
-  createHref,
   HistoryLocation,
 } from "./common";
 import {
@@ -17,7 +16,13 @@ import { warn } from "../warning";
 import { stripBase } from "../location";
 import { assign } from "../utils";
 
-import { type BrowserNavigator, getHash, urlToPath } from "@telegram-apps/sdk";
+import {
+  type BrowserNavigator,
+  type BrowserNavigatorHistoryItem,
+  getHash,
+  urlToPath,
+  createSafeURL,
+} from "@telegram-apps/sdk";
 
 type PopStateListener = (this: Window, ev: PopStateEvent) => any;
 
@@ -70,26 +75,29 @@ function useHistoryListeners<State>(
   // can trigger twice
   let pauseState: HistoryLocation | null = null;
 
-  const popStateHandler: PopStateListener = ({
-    state,
-  }: {
-    state: StateEntry | null;
-  }) => {
+  const popStateHandler = (
+    state: {
+      navigator: BrowserNavigator<State>;
+      delta: number;
+      from: BrowserNavigatorHistoryItem<State>;
+      to: BrowserNavigatorHistoryItem<State>;
+    } | null
+  ) => {
     const to = createCurrentLocation(base, navigator);
-    const from: HistoryLocation = currentLocation.value;
-    const fromState: StateEntry = historyState.value;
+    const from: HistoryLocation = currentLocation?.value;
+    const fromState: StateEntry = historyState?.value;
     let delta = 0;
 
-    if (state) {
+    if (state && (fromState?.back || fromState?.forward)) {
       currentLocation.value = to;
-      historyState.value = state;
+      // historyState.value = fromState;
 
       // ignore the popstate and reset the pauseState
       if (pauseState && pauseState === from) {
         pauseState = null;
         return;
       }
-      delta = fromState ? state.position - fromState.position : 0;
+      delta = fromState ? state.delta - fromState.position : 0;
     } else {
       replace(to);
     }
@@ -131,9 +139,11 @@ function useHistoryListeners<State>(
 
   function beforeUnloadListener() {
     const { history } = window;
-    if (!history.state) return;
+    navigator.detach();
+    // if (!navigator.state) return;
+    listeners = [];
     history.replaceState(
-      assign({}, history.state, { scroll: computeScrollPosition() }),
+      assign({}, navigator.state, { scroll: computeScrollPosition() }),
       ""
     );
   }
@@ -141,17 +151,22 @@ function useHistoryListeners<State>(
   function destroy() {
     for (const teardown of teardowns) teardown();
     teardowns = [];
-    window.removeEventListener("popstate", popStateHandler);
+    navigator.detach();
+
+    // window.removeEventListener("popstate", popStateHandler);
     window.removeEventListener("beforeunload", beforeUnloadListener);
   }
 
-  // set up the listeners and prepare teardown callbacks
-  window.addEventListener("popstate", popStateHandler);
-  // TODO: could we use 'pagehide' or 'visibilitychange' instead?
-  // https://developer.chrome.com/blog/page-lifecycle-api/
-  window.addEventListener("beforeunload", beforeUnloadListener, {
-    passive: true,
-  });
+  navigator.on("change", popStateHandler);
+
+  // // set up the listeners and prepare teardown callbacks
+  // window.addEventListener("popstate", popStateHandler);
+
+  // // TODO: could we use 'pagehide' or 'visibilitychange' instead?
+  // // https://developer.chrome.com/blog/page-lifecycle-api/
+  // window.addEventListener("beforeunload", beforeUnloadListener, {
+  //   passive: true,
+  // });
 
   return {
     pauseListeners,
@@ -163,19 +178,20 @@ function useHistoryListeners<State>(
 /**
  * Creates a state object
  */
-function buildState(
+function buildState<State>(
   back: HistoryLocation | null,
   current: HistoryLocation,
   forward: HistoryLocation | null,
   replaced: boolean = false,
-  computeScroll: boolean = false
+  computeScroll: boolean = false,
+  navigator: BrowserNavigator<State>
 ): StateEntry {
   return {
     back,
     current,
     forward,
     replaced,
-    position: window.history.length,
+    position: navigator.history.length,
     scroll: computeScroll ? computeScrollPosition() : null,
   };
 }
@@ -190,9 +206,11 @@ function useHistoryStateNavigation<State>(
   const currentLocation: ValueContainer<HistoryLocation> = {
     value: createCurrentLocation(base, navigator),
   };
-  const historyState: ValueContainer<StateEntry> = { value: history.state };
+  const historyState: ValueContainer<StateEntry> = {
+    value: navigator?.state as StateEntry,
+  };
   // build current history entry as this is a fresh navigation
-  if (!historyState.value) {
+  if (!historyState.value && !!navigator?.history) {
     changeLocation(
       currentLocation.value,
       {
@@ -200,7 +218,8 @@ function useHistoryStateNavigation<State>(
         current: currentLocation.value,
         forward: null,
         // the length is off by one, we need to decrease it
-        position: history.length - 1,
+        position:
+          navigator?.history?.length - (navigator?.history?.length > 0 ? 1 : 0),
         replaced: true,
         // don't add a scroll as the user may have an anchor, and we want
         // scrollBehavior to be triggered without a saved position
@@ -213,7 +232,7 @@ function useHistoryStateNavigation<State>(
   function changeLocation(
     to: HistoryLocation,
     state: StateEntry,
-    replace: boolean,
+    replace: boolean
   ): void {
     /**
      * if a base tag is provided, and we are on a normal domain, we have to
@@ -224,6 +243,7 @@ function useHistoryStateNavigation<State>(
      * there is no host, the `<base>` tag makes no sense and if there isn't a
      * base tag we can just use everything after the `#`.
      */
+
     const hashIndex = base.indexOf("#");
     const url =
       hashIndex > -1
@@ -231,32 +251,37 @@ function useHistoryStateNavigation<State>(
             ? base
             : base.slice(hashIndex)) + to
         : createBaseLocation() + base + to;
-    try {
-      // BROWSER QUIRK
-      // NOTE: Safari throws a SecurityError when calling this function 100 times in 30 seconds
-      history[replace ? "replaceState" : "pushState"](state, "", url);
-      historyState.value = state;
-    } catch (err) {
-      if (__DEV__) {
-        warn("Error with push/replace State", err);
-      } else {
-        console.error(err);
-      }
-      // Force the navigation, this also resets the call count
-      navigator[replace ? "replace" : "push"](url, state as State);
-    }
+
+    navigator[replace ? "replace" : "push"](url, state as State);
+    historyState.value = state;
+    // try {
+    //   // BROWSER QUIRK
+    //   // NOTE: Safari throws a SecurityError when calling this function 100 times in 30 seconds
+    //   history[replace ? "replaceState" : "pushState"](state, "", url);
+    //   historyState.value = state;
+    // } catch (err) {
+    //   if (__DEV__) {
+    //     warn("Error with push/replace State", err);
+    //   } else {
+    //     console.error(err);
+    //   }
+    //   // Force the navigation, this also resets the call count
+    //   navigator[replace ? "replace" : "push"](url, state as State);
+    // }
   }
 
   function replace(to: HistoryLocation, data?: HistoryState) {
     const state: StateEntry = assign(
       {},
-      history.state,
+      navigator.state,
       buildState(
         historyState.value.back,
         // keep back and forward entries but override current position
         to,
         historyState.value.forward,
-        true
+        true,
+        undefined,
+        navigator
       ),
       data,
       { position: historyState.value.position }
@@ -269,20 +294,21 @@ function useHistoryStateNavigation<State>(
   function push(to: HistoryLocation, data?: HistoryState) {
     // Add to current entry the information of where we are going
     // as well as saving the current position
+    if (!navigator) return;
     const currentState = assign(
       {},
       // use current history state to gracefully handle a wrong call to
       // history.replaceState
       // https://github.com/vuejs/router/issues/366
       historyState.value,
-      history.state as Partial<StateEntry> | null,
+      navigator.state as Partial<StateEntry> | null,
       {
         forward: to,
         scroll: computeScrollPosition(),
       }
     );
 
-    if (__DEV__ && !history.state) {
+    if (__DEV__ && !history?.state) {
       warn(
         `history.state seems to have been manually replaced without preserving the necessary values. Make sure to preserve existing history state if you are manually calling history.replaceState:\n\n` +
           `history.replaceState(history.state, '', url)\n\n` +
@@ -294,7 +320,14 @@ function useHistoryStateNavigation<State>(
 
     const state: StateEntry = assign(
       {},
-      buildState(currentLocation.value, to, null),
+      buildState(
+        currentLocation.value,
+        to,
+        null,
+        undefined,
+        undefined,
+        navigator
+      ),
       { position: currentState.position + 1 },
       data
     );
@@ -342,7 +375,10 @@ export function createWebHistory<State>(
       location: "",
       base,
       go,
-      createHref: createHref.bind(null, base),
+      // createHref: createHref.bind(null, base),
+      createHref: (to) => navigator.renderPath(urlToPath(to)),
+      encodeLocation: (to) =>
+        createSafeURL(navigator.renderPath(urlToPath(to))),
     },
 
     historyNavigation,

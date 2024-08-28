@@ -5,10 +5,13 @@ import dts from "vite-plugin-dts";
 import * as compiler from "@vue/compiler-sfc";
 
 export default defineConfig({
-  base: '/',
+  base: "/",
   server: {
     host: true,
     port: 8000,
+  },
+  define: {
+    __DEV__: false,
   },
   plugins: [
     vue3({

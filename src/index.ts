@@ -18,6 +18,7 @@ export * from './hooks-hocs/utils.js';
 export * from './hooks-hocs/viewport.js';
 export { useSDK } from './SDKProvider/SDKContext.js';
 export { default as SDKProvider } from "./SDKProvider/SDKProvider.vue";
+export * from './vue-router-integration/history/html5.js';
 
 export type {
   SDKContextType,
