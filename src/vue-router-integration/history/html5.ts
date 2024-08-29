@@ -165,7 +165,7 @@ function useHistoryListeners<State>(
     for (const teardown of teardowns) teardown();
     teardowns = [];
     navigator.detach();
-
+    navigator.off("change", popStateHandler);
     // window.removeEventListener("popstate", popStateHandler);
     window.removeEventListener("beforeunload", beforeUnloadListener);
   }
